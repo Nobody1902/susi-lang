@@ -37,6 +37,9 @@ class Interpreter:
 
         return output
 
+    def run_operation(self, left: Token, right: Token, operation: str) -> any:
+        print(f"{left.value} {operation} {right.value}")
+
     def run_closure(self, closure: Token) -> any:
         res = self.run_line(closure.value)
         if type(res) == error.Error:
@@ -48,6 +51,12 @@ class Interpreter:
 
         if len(tokens) == 1:
             tok = tokens[0]
+
+            if tok.type != TokenType.CLOSURE and tok.type != TokenType.VARIABLE:
+                if tok.type == TokenType.IDENTIFIER:
+                    return self.variables[tok.value]
+
+                return tok.value
 
             if tok.type == TokenType.CLOSURE:
                 res = self.run_closure(tok)
@@ -86,15 +95,18 @@ class Interpreter:
                 right = Token(TokenType.VALUE, self.variables[right.value], right.location)
 
             op = operation.value
-            if op == self.SYNTAX.operators["+"]:
-                return right.value + left.value
-            if op == self.SYNTAX.operators["-"]:
-                return right.value - left.value
-            if op == self.SYNTAX.operators["*"]:
-                return right.value * left.value
-            if op == self.SYNTAX.operators["/"]:
-                return right.value / left.value
+            if op == self.SYNTAX.operators["=="]:
+                return {"type": bool, "value": right.value == left.value}
 
+            # Number operations
+            if op == self.SYNTAX.operators["+"]:
+                return {"type": left.value["type"], "value": right.value["value"] + left.value["value"]}
+            if op == self.SYNTAX.operators["-"]:
+                return {"type": left.value["type"], "value": right.value["value"] - left.value["value"]}
+            if op == self.SYNTAX.operators["*"]:
+                return {"type": left.value["type"], "value": right.value["value"] * left.value["value"]}
+            if op == self.SYNTAX.operators["/"]:
+                return {"type": left.value["type"], "value": right.value["value"] / left.value["value"]}
 
             return error.Error(f"Unknown operation: {operation}", error.RUNTIME_LOCATION)
 

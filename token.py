@@ -8,6 +8,7 @@ class TokenType(Enum):
     VALUE = 3
     IDENTIFIER = 4
     CLOSURE = 5
+    IF = 6
 
 class Token:
 

@@ -1,16 +1,88 @@
 {
   "operators": {
-    "=": "=",
-    "(": "(",
-    ")": ")",
-    "*": "*",
-    "/": "/",
-    "+": "+",
-    "-": "-"
+    "==": {
+      "sign": "=="
+    },
+    "=": {
+      "sign": "="
+    },
+    "(": {
+      "sign": "("
+    },
+    ")": {
+      "sign": ")"
+    },
+    "*": {
+      "sign": "*",
+      "types": [
+        "int",
+        "float"
+      ]
+    },
+    "/": {
+      "sign": "/",
+      "types": [
+        "int",
+        "float"
+      ]
+    },
+    "+": {
+      "sign": "+",
+      "types": [
+        "int",
+        "float"
+      ]
+    },
+    "-": {
+      "sign": "-",
+      "types": [
+        "int",
+        "float"
+      ]
+    },
+    "!": {
+      "sign":"!",
+      "types": [
+        "bool"
+      ]
+    },
+    "&&": {
+      "sign": "&&",
+      "types": [
+        "bool"
+      ]
+    },
+    "||": {
+      "sign": "||",
+      "types": [
+        "bool"
+      ]
+    }
+  },
+  "bool": {
+    "true": "true",
+    "false": "false"
   },
   "keywords": {
-    "var": "var"
+    "var": "var",
+    "if(": "(",
+    "if)": ")"
   },
+  "statements": {
+    "if": {
+      "sign": "if",
+      "condition": true
+    },
+    "elif": {
+      "sign": "elif",
+      "condition": true
+    },
+    "else":{
+      "sign": "else",
+      "condition": false
+    }
+  },
+
   "numbers": {
     "0": "0",
     "1": "1",

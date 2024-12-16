@@ -1,6 +1,6 @@
+from os import stat
 from token import Token, TokenType, EOL_TOKEN
-from typing import List
-from syntax import Syntax
+from syntax import Statement, Syntax
 import error
 
 class Lexer:
@@ -30,7 +30,7 @@ class Lexer:
                     continue
 
                 num = float(word) if decimal_point != -1 else int(word)
-                return Token(TokenType.VALUE, num, self.location.new())
+                return Token(TokenType.VALUE, {"type": "int" if type(num) == int else "float", "value": num}, self.location.new())
             else:
                 break
 
@@ -43,14 +43,13 @@ class Lexer:
         
         line = line[start+1:]
 
-        ls = line.split(self.SYNTAX.operators["="])
-        name = ls[0].replace(" ", "")
-        value = ls[1][1:]
+        name = line[:line.find(self.SYNTAX.operators["="].sign)-1]
+        value = line[line.find(self.SYNTAX.operators["="].sign)+2:]
 
         self.location.char += len(name) + 3 
 
-        if(len(ls) < 2 or len(name) == 0):
-            return error.Error(f"Variable defined incorrectly: '{ls}'.", self.location)
+        if(len(value) == 0 or len(name) == 0) or " " in name or line[line.find(self.SYNTAX.operators["="].sign)+1] != " " or line[line.find(self.SYNTAX.operators["="].sign)-1] != " ":
+            return error.Error(f"Variable defined incorrectly: 'var {line.replace('\n', '')}'.", self.location)
         
         # Check if the variable name is a number
         is_num = self.parse_number(name)
@@ -59,7 +58,7 @@ class Lexer:
         
         # Check if the variable name is an operator
         for n in name:
-            if(n in self.SYNTAX.operators.values()):
+            if(n in self.SYNTAX.operators):
                 return error.Error(f"Variable name cannot be an operator: '{name}'", self.location)
 
         # Check if the variable name is a keyword
@@ -69,7 +68,7 @@ class Lexer:
         if(name in self.variables):
             return error.Error(f"Variable '{name}' has been already defined.", self.location)
 
-        parsed = self.parse_line(value, check_variables=False, start_char=self.location.new().char)
+        parsed = self.parse_line(value, check_multiline=False, start_char=self.location.new().char)
 
         if type(parsed) == error.Error:
             return parsed
@@ -77,11 +76,10 @@ class Lexer:
         return Token(TokenType.VARIABLE, {"name": name, "value": parsed}, self.location.new())
 
     
-    def parse_closure(self, line: str, start: int) -> tuple[Token, int] | None | error.Error:
-        # Fix the location when a closure is inside the closure
-        line = line[start:]
+    def parse_closure(self, i_line: str, start: int) -> tuple[Token, int] | None | error.Error:
+        line = i_line[start:]
 
-        if not line.startswith(self.SYNTAX.closure["("]):
+        if not line.startswith(self.SYNTAX.closure["("]) or (start != 0 and i_line[start-1] != " "):
             return None
         
         # Slicing magic
@@ -95,14 +93,63 @@ class Lexer:
         closing_idx = len(line) - reverse_idx
 
         value = line[1:closing_idx-1]
-        parsed = self.parse_line(value, check_variables=False, start_char=self.location.char)
+        parsed = self.parse_line(value, check_multiline=False, start_char=self.location.char)
         if type(parsed) == error.Error:
             parsed.location.char -= 1
             return parsed
 
         return (Token(TokenType.CLOSURE, parsed, parsed[0].location), closing_idx)
 
-    def parse_line(self, line:str, check_variables = True, start_char=0) ->List[Token] | error.Error:
+    def parse_statment(self, token_list: list[str], statement: Statement):
+        condition = None
+        if not statement.sign in token_list and not statement.condition:
+            return None
+        elif statement.condition:
+            for i, t in enumerate(token_list):
+                if t.startswith(statement.sign + self.SYNTAX.keywords["if("]) and t.endswith(self.SYNTAX.keywords["if)"]):
+                    condition = t[len(statement.sign):]
+                    token_list[i] = t[:len(statement.sign)]
+                    break
+            else:
+                return None
+
+
+        split_idx = token_list.index(statement.sign)
+
+        before = token_list[:split_idx]
+        after = token_list[split_idx+1:]
+
+        print(before, after)
+
+        return (condition, before, after)
+
+    def parse_if(self, line: str, i: int, st: int = 0, st_count: int = 3) -> tuple[Token] | None | error.Error:
+        if not line[:i].startswith(self.SYNTAX.statements[st].sign):
+            return None
+
+        tabbed_split = line.replace("\n", "").split("\t")
+        print(tabbed_split)
+
+        prev_value = tabbed_split
+
+        result = {}
+        
+        for i in range(st_count - st):
+            res = self.parse_statment(prev_value, self.SYNTAX.statements[st+i])
+            if res != None:
+                stat_condition, preceding_value, stat_value = res
+                result[stat_condition] = (preceding_value, stat_value)
+                prev_value = preceding_value
+            else:
+                # Haven't found the statement sign
+                continue
+
+        print(f"{result=}")
+
+        
+        return None
+
+    def parse_line(self, line:str, check_multiline = True, start_char=0) -> list[Token] | error.Error:
         tokens = []
         word: str = ""
 
@@ -135,25 +182,47 @@ class Lexer:
             if c != ' ' and c != '\n':
                 word += c
                 continue
+            
+            # Find statements
+            if check_multiline:
+                statement = self.parse_if(line, i)
+                if type(statement) == error.Error:
+                    return statement
 
+                if statement != None:
+                    tokens.append(statement)
+                    word = ""
+                    break
+            
             # Find numbers
             num = self.parse_number(word)
-            if(type(num) == error.Error):
+            if type(num) == error.Error:
                 return num
                 
-            if(num != None): 
+            if num != None:
                 tokens.append(num)
                 word = ""
                 continue
-                
+            
+            # Find bools
+            if word == self.SYNTAX.bool["true"]:
+                tokens.append(Token(TokenType.VALUE, {"type": "bool", "value": True}, self.location.new()))
+                word = ""
+                continue
+
+            if word == self.SYNTAX.bool["false"]:
+                tokens.append(Token(TokenType.VALUE, {"type": "bool", "value": False}, self.location.new()))
+                word = ""
+                continue
+            
             # Find operators
-            if word in self.SYNTAX.operators.values():
+            if word in self.SYNTAX.operators:
                 tokens.append(Token(TokenType.OPERATOR, word, self.location.new()))
                 word = ""
                 continue
 
             # Find variables
-            if check_variables:
+            if check_multiline:
                 var = self.parse_variables(word, line, i)
                 if(type(var) == error.Error):
                     return var
@@ -177,16 +246,55 @@ class Lexer:
 
         return tokens
 
+    def format_newlines(self, code: str) -> str:
+        output = ""
+        statements = list(self.SYNTAX.statements)
+        statements.sort(key=len)
+        statements.reverse()
+
+        lines = code.splitlines(keepends=True)
+        skip = 0
+
+        for l, line in enumerate(lines):
+            if skip > 0:
+                skip -= 1
+                continue
+
+            for s in statements:
+                if line.startswith(str(s)):
+                    break
+            else:
+                output += line
+                continue
+
+            # Multiline run conditions
+            if l > 0 and output[l - 1][-1] != "\t":
+                    output += "\t"           
+            output += line.replace("\n", "")
+            i = l
+            while len(lines) - 1 > i:
+                if lines[i + 1].startswith("\t"):
+                    output += lines[i + 1].replace("\n", "")
+                    skip += 1
+                else:
+                    break
+
+                i += 1
+                
+        
+        return output
+
 
     def parse(self, code: str, check_variables = True) -> list[Token] | error.Error:
         self.location.line = 0
         self.location.char = 0
         tokens = []
         
+        code = self.format_newlines(code) 
         print(code)
                 
         for line in code.splitlines(keepends=True):
-            parsed_line = self.parse_line(line, check_variables=check_variables)
+            parsed_line = self.parse_line(line, check_multiline=check_variables)
             if type(parsed_line) == error.Error:
                 return parsed_line
 
@@ -209,6 +317,11 @@ class Lexer:
 
                 prev = tokens[i-1]
                 next = tokens[i+1]
+
+                if not prev.value["type"] in self.SYNTAX.operators[t.value].types:
+                    return error.Error(f"Operation '{t.value}' doesn't support type '{prev.value['type']}'", t.location)
+                if not next.value["type"] in self.SYNTAX.operators[t.value].types:
+                    return error.Error(f"Operation '{t.value}' doesn't support type '{next.value['type']}'", t.location)
 
                 tokens.pop(i+1)
                 tokens.pop(i-1)
